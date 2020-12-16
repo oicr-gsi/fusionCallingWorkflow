@@ -6,7 +6,7 @@ struct InputGroup {
   String readGroup
 }
 
-workflow arriba {
+workflow fusionCalling {
 
   input {
     Array[InputGroup] inputGroups
@@ -66,24 +66,26 @@ task runArriba {
     File?  structuralVariants
     String index = "$HG38_STAR_INDEX100_ROOT"
     String draw = "$ARRIBA_ROOT/bin/draw_fusions.R"
-    String modules = "arriba/1.2 hg38-star-index100/2.7.3a samtools/1.9 rarriba/0.1 hg38-cosmic-fusion/v91 star/2.7.3a"
+    String modules = "arriba/2.0 hg38-star-index100/2.7.6a samtools/1.9 rarriba/0.1 hg38-cosmic-fusion/v91 star/2.7.6a"
     String gencode = "$GENCODE_ROOT/gencode.v31.annotation.gtf"
     String genome = "$HG38_ROOT/hg38_random.fa"
-    String cytobands = "$ARRIBA_ROOT/share/database/cytobands_hg38_GRCh38_2018-02-23.tsv"
-    String domains = "$ARRIBA_ROOT/share/database/protein_domains_hg38_GRCh38_2019-07-05.gff3"
-    String blacklist = "$ARRIBA_ROOT/share/database/blacklist_hg38_GRCh38_2018-11-04.tsv.gz"
-    String chimOutType = "WithinBAM SoftClip"
+    String cytobands = "$ARRIBA_ROOT/share/database/cytobands_hg38_GRCh38_v2.0.0.tsv"
+    String domains = "$ARRIBA_ROOT/share/database/protein_domains_hg38_GRCh38_v2.0.0.gff3"
+    String blacklist = "$ARRIBA_ROOT/share/database/blacklist_hg38_GRCh38_v2.0.0.tsv.gz"
+    String chimOutType = "WithinBAM HardClip"
     String cosmic = "$HG38_COSMIC_FUSION_ROOT/CosmicFusionExport.tsv"
     String outputFileNamePrefix
-    Int outFilterMultimapNmax = 1
-    Int outFilterMismatchNmax = 3
+    Int outFilterMultimapNmax = 50
+    Int peOverlapNbasesMin = 10
+    Int alignSplicedMateMapLminOverLmate = 0.5
+    Int alignSJstitchMismatchNmax 5 -1 5 5
     Int chimSegmentMin = 10
-    Int chimScoreMin = 1
-    Int chimScoreDropMax = 30
     Int chimJunctionOverhangMin = 10
+    Int chimScoreDropMax = 30
     Int chimScoreJunctionNonGTAG = 0
     Int chimScoreSeparation = 1
     Int chimSegmentReadGapMax = 3
+    Int chimScoreMin = 1
     Int threads = 8
     Int jobMemory = 64
     Int timeout = 72
