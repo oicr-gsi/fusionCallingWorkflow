@@ -54,6 +54,7 @@ workflow fusionCalling {
        name: "samtools/1.9",
        url: "http://www.htslib.org/"
      },
+     {
        name: "star-fusion-genome/1.8.1-hg38",
        url: "https://data.broadinstitute.org/Trinity/CTAT_RESOURCE_LIB/__genome_libs_StarFv1.8"
      },
@@ -65,7 +66,7 @@ workflow fusionCalling {
   }
 }
 
-task runArriba {
+task fusionCalling {
   input {
     Array[File]+ read1s
     Array[File]+ read2s
@@ -81,6 +82,7 @@ task runArriba {
     String blacklist = "$ARRIBA_ROOT/share/database/blacklist_hg38_GRCh38_2018-11-04.tsv.gz"
     String chimOutType = "WithinBAM HardClip"
     String cosmic = "$HG38_COSMIC_FUSION_ROOT/CosmicFusionExport.tsv"
+    String knownfusions = "$ARRIBA_ROOT/share/database/known_fusions_hg38_GRCh38_v2.0.0.tsv.gz"
     String outputFileNamePrefix
     Int outFilterMultimapNmax = 1
     Int outFilterMismatchNmax = 3
