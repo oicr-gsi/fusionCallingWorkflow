@@ -26,15 +26,35 @@ workflow fusionCalling {
     structuralVariants: "path to structural variants for sample"
   }
 
-  call fusionCalling { input: read1s = read1s, read2s = read2s, readGroups = readGroups, outputFileNamePrefix = outputFileNamePrefix, structuralVariants = structuralVariants }
+  call align {
+    input:
+     read1s = read1s,
+     read2s = read2s,
+     readGroups = readGroups,
+     outputFileNamePrefix = outputFileNamePrefix }
+
+  call runArriba {
+   input:
+    tumorBam = align.sortAlignBam,
+    outputFileNamePrefix = outputFileNamePrefix,
+    structuralVariants = structuralVariants }
+
+  call runStarFusion {
+   input:
+    tumorBam = align.sortAlignBam,
+    chimericOutJunction  = align.spliceJunctions,
+    outputFileNamePrefix = outputFileNamePrefix }
 
   output {
-    File fusionsPredictions     = fusionCalling.fusionPredictions
-    File fusionDiscarded        = fusionCalling.fusionDiscarded
-    File spliceJunctions        = fusionCalling.spliceJunctions
-    File sortAlignBam           = fusionCalling.sortAlignBam
-    File sortAlignIndex         = fusionCalling.sortAlignIndex
-    File fusionFigure           = fusionCalling.fusionFigure
+    File spliceJunctions        = align.spliceJunctions
+    File sortAlignBam           = align.sortAlignBam
+    File sortAlignIndex         = align.sortAlignIndex
+    File fusionsPredictions     = runArriba.fusionPredictions
+    File fusionDiscarded        = runArriba.fusionDiscarded
+    File fusionFigure           = runArriba.fusionFigure
+    File fusions                = runStarFusion.fusionPredictions
+    File fusionsAbridged        = runStarFusion.fusionPredictionsAbridged
+    File fusionCodingEffects    = runStarFusion.fusionCodingEffects
   }
 
   meta {
@@ -66,23 +86,15 @@ workflow fusionCalling {
   }
 }
 
-task fusionCalling {
+task align {
   input {
     Array[File]+ read1s
     Array[File]+ read2s
     Array[String]+ readGroups
     File?  structuralVariants
     String index = "$HG38_STAR_INDEX100_ROOT"
-    String draw = "$ARRIBA_ROOT/bin/draw_fusions.R"
-    String modules = "arriba/2.0 hg38-star-index100/2.7.6a samtools/1.9 rarriba/0.1 hg38-cosmic-fusion/v91 star/2.7.6a"
-    String gencode = "$GENCODE_ROOT/gencode.v31.annotation.gtf"
-    String genome = "$HG38_ROOT/hg38_random.fa"
-    String cytobands = "$ARRIBA_ROOT/share/database/cytobands_hg38_GRCh38_2018-02-23.tsv"
-    String domains = "$ARRIBA_ROOT/share/database/protein_domains_hg38_GRCh38_2019-07-05.gff3"
-    String blacklist = "$ARRIBA_ROOT/share/database/blacklist_hg38_GRCh38_2018-11-04.tsv.gz"
+    String modules = "hg38-star-index100/2.7.6a samtools/1.9 star/2.7.6a"
     String chimOutType = "WithinBAM HardClip"
-    String cosmic = "$HG38_COSMIC_FUSION_ROOT/CosmicFusionExport.tsv"
-    String knownfusions = "$ARRIBA_ROOT/share/database/known_fusions_hg38_GRCh38_v2.0.0.tsv.gz"
     String outputFileNamePrefix
     Int outFilterMultimapNmax = 1
     Int outFilterMismatchNmax = 3
@@ -105,16 +117,7 @@ task fusionCalling {
     readGroups: "array of readgroup lines"
     outputFileNamePrefix: "Prefix for filename"
     index: "Path to STAR index"
-    draw: "path to arriba draw command"
     modules: "Names and versions of modules to load"
-    gencode: "Path to gencode annotation file"
-    domains: "protein domains for annotation"
-    cytobands: "cytobands for figure annotation"
-    cosmic: "known fusions from cosmic"
-    knownfusions: "known fusions from arriba"
-    blacklist: "List of fusions which are seen in normal tissue or artefacts"
-    genome: "Path to loaded genome"
-    structuralVariants: "file containing structural variant calls"
     outFilterMultimapNmax: "max number of multiple alignments allowed for a read"
     outFilterMismatchNmax: "maximum number of mismatches per pair"
     chimSegmentMin: "the minimum mapped length of the two segments of a chimera"
@@ -151,6 +154,69 @@ task fusionCalling {
       --alignSplicedMateMapLminOverLmate 0.5 \
       --chimSegmentReadGapMax ~{chimSegmentReadGapMax} --outFileNamePrefix ~{outputFileNamePrefix}.
 
+  >>>
+
+  runtime {
+    memory:  "~{jobMemory} GB"
+    modules: "~{modules}"
+    cpu:     "~{threads}"
+    timeout: "~{timeout}"
+  }
+
+  output {
+      File spliceJunctions          = "~{outputFileNamePrefix}.SJ.out.tab"
+      File sortAlignBam             = "~{outputFileNamePrefix}.Aligned.sortedByCoord.out.bam"
+      File sortAlignIndex           = "~{outputFileNamePrefix}.Aligned.sortedByCoord.out.bam.bai"
+  }
+
+  meta {
+    output_meta: {
+      spliceJunctions: "Splice junctions from star fusion run",
+      sortAlignBam: "Output sorted bam file aligned to genome",
+      sortAlignIndex: "Output index file for sorted bam aligned to genome",
+    }
+  }
+}
+
+task runArriba {
+  input {
+    File?  structuralVariants
+    String modules = "arriba/2.0 rarriba/0.1 hg38-cosmic-fusion/v91"
+    String gencode = "$GENCODE_ROOT/gencode.v31.annotation.gtf"
+    String genome = "$HG38_ROOT/hg38_random.fa"
+    String cosmic = "$HG38_COSMIC_FUSION_ROOT/CosmicFusionExport.tsv"
+    String knownfusions = "$ARRIBA_ROOT/share/database/known_fusions_hg38_GRCh38_v2.0.0.tsv.gz"
+    String cytobands = "$ARRIBA_ROOT/share/database/cytobands_hg38_GRCh38_v2.0.0.tsv"
+    String domains = "$ARRIBA_ROOT/share/database/protein_domains_hg38_GRCh38_v2.0.0.gff3"
+    String blacklist = "$ARRIBA_ROOT/share/database/blacklist_hg38_GRCh38_v2.0.0.tsv.gz"
+    String draw = "$ARRIBA_ROOT/bin/draw_fusions.R"
+    String outputFileNamePrefix
+    Int threads = 8
+    Int jobMemory = 64
+    Int timeout = 72
+  }
+
+  parameter_meta {
+    structuralVariants: "file containing structural variant calls"
+    outputFileNamePrefix: "Prefix for filename"
+    index: "Path to STAR index"
+    draw: "path to arriba draw command"
+    modules: "Names and versions of modules to load"
+    gencode: "Path to gencode annotation file"
+    domains: "protein domains for annotation"
+    cytobands: "cytobands for figure annotation"
+    cosmic: "known fusions from cosmic"
+    knownfusions: "known fusions from arriba"
+    blacklist: "List of fusions which are seen in normal tissue or artefacts"
+    genome: "Path to loaded genome"
+    threads: "Requested CPU threads"
+    jobMemory: "Memory allocated for this job"
+    timeout: "Hours before task timeout"
+  }
+
+  command <<<
+      set -euo pipefail
+
       arriba \
       -x ~{outputFileNamePrefix}.Aligned.sortedByCoord.out.bam \
       -o ~{outputFileNamePrefix}.fusions.tsv -O ~{outputFileNamePrefix}.fusions.discarded.tsv \
@@ -158,11 +224,58 @@ task fusionCalling {
       -a ~{genome} -g ~{gencode} -b ~{blacklist} -t ~{knownfusions} \
       -T -P
 
-      samtools index ~{outputFileNamePrefix}.Aligned.sortedByCoord.out.bam
-
       Rscript ~{draw} --annotation=~{gencode} --fusions=~{outputFileNamePrefix}.fusions.tsv \
       --output=~{outputFileNamePrefix}.fusions.pdf --alignments=~{outputFileNamePrefix}.Aligned.sortedByCoord.out.bam \
       --cytobands=~{cytobands} --proteinDomains=~{domains}
+  >>>
+
+  runtime {
+    memory:  "~{jobMemory} GB"
+    modules: "~{modules}"
+    cpu:     "~{threads}"
+    timeout: "~{timeout}"
+  }
+
+  output {
+      File fusionPredictions        = "~{outputFileNamePrefix}.fusions.tsv"
+      File fusionDiscarded          = "~{outputFileNamePrefix}.fusions.discarded.tsv"
+      File fusionFigure             = "~{outputFileNamePrefix}.fusions.pdf"
+  }
+
+  meta {
+    output_meta: {
+      fusionPredictions: "Fusion output tsv",
+      fusionDiscarded:   "Discarded fusion output tsv",
+      fusionFigure: "PDF rendering of candidate fusions"
+    }
+  }
+}
+
+task runStarFusion {
+  input {
+    String modules = "star-fusion/1.8.1 star-fusion-genome/1.8.1-hg38"
+    String genome = "$HG38_ROOT/hg38_random.fa"
+    String outputFileNamePrefix
+    Int threads = 8
+    Int jobMemory = 64
+    Int timeout = 72
+  }
+
+  parameter_meta {
+    outputFileNamePrefix: "Prefix for filename"
+    modules: "Names and versions of modules to load"
+    genome: "Path to loaded genome"
+    threads: "Requested CPU threads"
+    jobMemory: "Memory allocated for this job"
+    timeout: "Hours before task timeout"
+  }
+
+  command <<<
+      set -euo pipefail
+
+      STAR-Fusion --genome_lib_dir "~{genomeDir}"  \
+               -J chimericOutJunction --examine_coding_effect \
+               --CPU "~{threads}"
   >>>
 
   runtime {
